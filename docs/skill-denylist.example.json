@@ -1,0 +1,4 @@
+{
+  "slugs": [],
+  "_comment": "額外排除的 skill slug；legacy 與 OMX 基礎設施已在 Foundry 內建 denylist"
+}

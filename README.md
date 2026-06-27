@@ -129,6 +129,16 @@ Foundry now **replaces** skill-mnemo and auto-skill for memory indexing and skil
 | **Foundry** | Session recording, experience extraction, skill evolution, unified SQLite recall |
 | **skill-mnemo** (deprecated) | Was round-level USER/MEMORY recall — use Foundry Retriever instead |
 
+## Skill suggestion filtering
+
+Retriever excludes legacy skills (`skill-mnemo`, `auto-skill`) and OMX infrastructure skills (`analyze`, `help`, `worker`, etc.) by default. Add custom slugs in:
+
+`~/.foundry/config/skill-denylist.json` (see `docs/skill-denylist.example.json`)
+
+```bash
+node cli/foundry.mjs deprecate-legacy --archive-db   # mark legacy slugs archived in SQLite
+```
+
 Superset hooks are chained **after** Foundry adapters automatically.
 
 ### Background worker (macOS launchd)

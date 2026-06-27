@@ -5,6 +5,10 @@ import {
   queryKnowledgeEntries, queryExperiences,
 } from './db.mjs';
 import { getSkillsRoot } from './paths.mjs';
+import {
+  isExcludedSkill, shouldSkipSkillDirectoryName, shouldSkipSkillScanPath,
+  getExcludedSlugList,
+} from './skill-filter.mjs';
 
 const COMPOUND_KEYWORDS = ['plan', 'review', 'design', 'architect', 'refactor', 'audit', 'strategy'];
 
@@ -62,15 +66,17 @@ function scanSkillFiles(skillsRoot) {
     for (const ent of entries) {
       const full = join(dir, ent.name);
       if (ent.isDirectory()) {
+        if (shouldSkipSkillDirectoryName(ent.name) || shouldSkipSkillScanPath(full)) continue;
         walk(full, depth + 1);
       } else if (ent.name === 'SKILL.md') {
-        const slug = basename(dir);
         let content = '';
         try {
           content = readFileSync(full, 'utf8').slice(0, 8000);
         } catch {
           continue;
         }
+        const slug = basename(dir);
+        if (isExcludedSkill(slug, parseSkillDescription(content))) continue;
         results.push({ slug, path: full, content, dir });
       }
     }
@@ -90,9 +96,17 @@ export function parseSkillDescription(content) {
 /** 從 sqlite 讀取 skill tags（slug + path + metrics） */
 function getSqliteSkills(db) {
   try {
+    const excluded = getExcludedSlugList();
+    if (excluded.length === 0) {
+      return db.prepare(
+        'SELECT slug, path, reuse_count, success_rate FROM skills WHERE state = ?',
+      ).all('promoted');
+    }
+    const placeholders = excluded.map(() => '?').join(', ');
     return db.prepare(
-      'SELECT slug, path, reuse_count, success_rate FROM skills WHERE state = ?',
-    ).all('promoted');
+      `SELECT slug, path, reuse_count, success_rate FROM skills
+       WHERE state = ? AND slug NOT IN (${placeholders})`,
+    ).all('promoted', ...excluded);
   } catch {
     return [];
   }
@@ -158,6 +172,7 @@ export function retrieveSkills({ prompt, limit = 5 }) {
   }
 
   return [...scored.values()]
+    .filter((entry) => !isExcludedSkill(entry.slug, entry.description))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

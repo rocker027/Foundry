@@ -29,7 +29,7 @@ import { parseFixArgs, parseDeriveArgs, parseAuditArgs, parseDeprecateLegacyArgs
 import { createFixDraftFromSession, createDerivedDraftFromSession } from '../packages/hook-bridge/session-draft.mjs';
 import { runKnowledgeAudit } from '../packages/hook-bridge/knowledge-audit.mjs';
 import { dedupeExperiences } from '../packages/hook-bridge/experience-dedup.mjs';
-import { planDeprecateLegacy, formatDeprecateReport } from '../packages/hook-bridge/deprecate-legacy.mjs';
+import { planDeprecateLegacy, formatDeprecateReport, archiveLegacySkillsInDb } from '../packages/hook-bridge/deprecate-legacy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = getFoundryRepoRoot();
@@ -57,7 +57,7 @@ Usage:
   foundry review
   foundry migrate-mnemo [--dry-run] [--path <dir>]
   foundry migrate-auto-skill [--dry-run] [--path <dir>]
-  foundry deprecate-legacy [--dry-run] [--execute]
+  foundry deprecate-legacy [--dry-run] [--execute] [--archive-db]
   foundry setup [--target <path>] [--install-launchd]
   foundry queue-worker [--once]
   foundry autopromote [--dry-run]
@@ -260,6 +260,11 @@ function cmdDeprecateLegacy(args) {
   if (dryRun && execute) {
     process.stderr.write('Use either --dry-run (default) or --execute, not both.\n');
     process.exit(1);
+  }
+  if (args.includes('--archive-db')) {
+    const archived = archiveLegacySkillsInDb();
+    process.stdout.write(`Archived legacy skills in SQLite: ${archived.length ? archived.join(', ') : '(none)'}\n`);
+    if (!execute) return;
   }
   const plan = planDeprecateLegacy({ execute });
   process.stdout.write(`${formatDeprecateReport(plan)}\n`);

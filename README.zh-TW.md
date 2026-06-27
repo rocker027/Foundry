@@ -129,6 +129,16 @@ Foundry 已**取代** skill-mnemo 與 auto-skill 的記憶索引與 skill 演化
 | **Foundry** | Session 記錄、經驗萃取、skill 演化、統一 SQLite 召回 |
 | **skill-mnemo**（已廢棄） | 原為 USER/MEMORY 回合召回 — 改用 Foundry Retriever |
 
+## Skill 建議過濾
+
+Retriever 預設**不建議** legacy（`skill-mnemo`、`auto-skill`）與 OMX 基礎設施 skills（`analyze`、`help`、`worker` 等）。額外排除請編輯：
+
+`~/.foundry/config/skill-denylist.json`（範例見 `docs/skill-denylist.example.json`）
+
+```bash
+node cli/foundry.mjs deprecate-legacy --archive-db   # 將 legacy slug 標記為 archived
+```
+
 Superset hooks 會在 Foundry adapter 之後自動 chain，不影響既有通知。
 
 ### 背景 worker（macOS launchd）

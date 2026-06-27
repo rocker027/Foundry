@@ -4,6 +4,7 @@ import {
 import { join, basename } from 'node:path';
 import { validateSlug, assertPathWithinRoot } from './security.mjs';
 import { insertSkillVersion } from './db.mjs';
+import { isLegacySkillSlug, isExcludedSkill, isOmxPluginSkill } from './skill-filter.mjs';
 import { gitDiffInSkillsRoot, isGitRepo } from './git.mjs';
 
 export const FOUNDRY_DIR = '.foundry';
@@ -214,6 +215,7 @@ export function discoverSkillSlugs(skillsRoot, { excludeDeprecated = true } = {}
       const skillMd = join(full, 'SKILL.md');
       if (existsSync(skillMd)) {
         const slug = basename(full);
+        if (isExcludedSkill(slug)) continue;
         try {
           validateSlug(slug);
           slugs.push({ slug, dir: full, skillMd });

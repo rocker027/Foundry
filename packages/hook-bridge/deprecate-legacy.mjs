@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { openDb } from './db.mjs';
+import { isLegacySkillSlug, LEGACY_SKILL_SLUGS } from './skill-filter.mjs';
 
 const DEPRECATE_DATE = '2026-06-27';
 
@@ -43,7 +45,9 @@ export function planDeprecateLegacy({ execute = false } = {}) {
     }
   }
 
-  return { actions, manualSteps, skillsRoot, execute };
+  const dbArchived = execute ? archiveLegacySkillsInDb() : [];
+
+  return { actions, manualSteps, skillsRoot, execute, dbArchived };
 }
 
 /** 格式化廢棄報告 */
@@ -76,6 +80,26 @@ export function formatDeprecateReport(plan) {
     lines.push(`1. ${step}`);
   }
 
+  if (plan.dbArchived?.length) {
+    lines.push('', '## SQLite archived slugs', '');
+    for (const slug of plan.dbArchived) {
+      lines.push(`- ${slug}`);
+    }
+  }
+
   lines.push('');
   return lines.join('\n');
+}
+
+/** 將 sqlite 中 legacy skill 標記為 archived */
+export function archiveLegacySkillsInDb() {
+  const db = openDb();
+  const archived = [];
+  for (const slug of LEGACY_SKILL_SLUGS) {
+    const result = db.prepare(
+      "UPDATE skills SET state = 'archived' WHERE slug = ? AND state != 'archived'",
+    ).run(slug);
+    if (result.changes > 0) archived.push(slug);
+  }
+  return archived;
 }
