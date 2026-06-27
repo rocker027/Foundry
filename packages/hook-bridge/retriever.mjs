@@ -1,7 +1,12 @@
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { openDb, incrementReuseCount } from './db.mjs';
+import {
+  openDb, incrementReuseCount, incrementKnowledgeAccess,
+  queryKnowledgeEntries, queryExperiences,
+} from './db.mjs';
 import { getSkillsRoot } from './paths.mjs';
+
+const COMPOUND_KEYWORDS = ['plan', 'review', 'design', 'architect', 'refactor', 'audit', 'strategy'];
 
 /** 分詞用於關鍵字匹配 */
 export function tokenize(text) {
@@ -9,6 +14,12 @@ export function tokenize(text) {
     (String(text).toLowerCase().match(/[\p{Letter}\p{Number}_-]+/gu) || [])
       .filter((t) => t.length >= 2),
   ));
+}
+
+/** 是否為 compound 召回模式（plan/review 等關鍵字） */
+export function isCompoundMode(prompt) {
+  const lower = String(prompt || '').toLowerCase();
+  return COMPOUND_KEYWORDS.some((k) => lower.includes(k));
 }
 
 /** 對文字打分 */
@@ -19,6 +30,19 @@ function scoreText(text, prompt, tokens) {
     if (lower.includes(token)) score += token.length > 3 ? 2 : 1;
   }
   if (prompt && lower.includes(prompt.toLowerCase().slice(0, 40))) score += 3;
+  return score;
+}
+
+/** 對 keywords 陣列打分 */
+function scoreKeywords(keywords, tokens) {
+  if (!keywords?.length) return 0;
+  let score = 0;
+  for (const kw of keywords) {
+    const lower = String(kw).toLowerCase();
+    for (const token of tokens) {
+      if (lower.includes(token)) score += 2;
+    }
+  }
   return score;
 }
 
@@ -64,6 +88,16 @@ function getSqliteSkills(db) {
   }
 }
 
+/** 從 sqlite 查詢 knowledge + experiences */
+function queryMemoryEntries(db, { compound = false, limit = 20 } = {}) {
+  const knowledge = queryKnowledgeEntries(db, { state: 'active', limit });
+  const experiences = queryExperiences(db, {
+    state: compound ? undefined : 'pending',
+    limit,
+  });
+  return { knowledge, experiences };
+}
+
 /** 關鍵字檢索建議 skills */
 export function retrieveSkills({ prompt, limit = 5 }) {
   const tokens = tokenize(prompt || '');
@@ -84,6 +118,7 @@ export function retrieveSkills({ prompt, limit = 5 }) {
         path: skill.path,
         score,
         source: 'filesystem',
+        kind: 'skill',
       });
     }
   }
@@ -98,6 +133,7 @@ export function retrieveSkills({ prompt, limit = 5 }) {
           path: row.path,
           score,
           source: 'sqlite',
+          kind: 'skill',
         });
       }
     }
@@ -108,13 +144,66 @@ export function retrieveSkills({ prompt, limit = 5 }) {
     .slice(0, limit);
 }
 
-/** 構建 before_task 注入上下文 */
-export function buildAdditionalContext(prompt) {
-  const matches = retrieveSkills({ prompt, limit: 5 });
-  if (matches.length === 0) return null;
+/** 檢索 knowledge entries 與 experiences */
+export function retrieveMemory({ prompt, limit = 5, compound = false }) {
+  const tokens = tokenize(prompt || '');
+  if (tokens.length === 0) return { knowledge: [], experiences: [] };
 
   const db = openDb();
-  for (const m of matches) {
+  const { knowledge, experiences } = queryMemoryEntries(db, { compound, limit: limit * 4 });
+
+  const scoredKnowledge = knowledge
+    .map((entry) => ({
+      ...entry,
+      score: scoreText(entry.abstract, prompt, tokens) + scoreKeywords(entry.keywords, tokens),
+      kind: 'knowledge',
+    }))
+    .filter((e) => e.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  const scoredExperiences = experiences
+    .map((exp) => ({
+      ...exp,
+      score: scoreText(exp.abstract, prompt, tokens) + scoreKeywords(exp.keywords, tokens)
+        + (exp.skill_slug && tokens.some((t) => exp.skill_slug.includes(t)) ? 3 : 0),
+      kind: 'experience',
+    }))
+    .filter((e) => e.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return { knowledge: scoredKnowledge, experiences: scoredExperiences };
+}
+
+/** 取得 profile 前置內容（category=profile） */
+export function getProfilePrepend(db) {
+  const profiles = queryKnowledgeEntries(db, { state: 'active', category: 'profile', limit: 3 });
+  if (profiles.length === 0) return null;
+
+  const lines = ['[Foundry user profile]'];
+  for (const p of profiles) {
+    lines.push(`- ${p.abstract}`);
+    incrementKnowledgeAccess(db, p.entry_id);
+  }
+  return lines.join('\n');
+}
+
+/** 構建 before_task 注入上下文 */
+export function buildAdditionalContext(prompt) {
+  const compound = isCompoundMode(prompt);
+  const skillMatches = retrieveSkills({ prompt, limit: compound ? 8 : 5 });
+  const memory = retrieveMemory({ prompt, limit: compound ? 5 : 3, compound });
+
+  const db = openDb();
+  const profile = getProfilePrepend(db);
+
+  if (skillMatches.length === 0 && memory.knowledge.length === 0
+    && memory.experiences.length === 0 && !profile) {
+    return null;
+  }
+
+  for (const m of skillMatches) {
     try {
       incrementReuseCount(db, m.slug);
     } catch {
@@ -122,10 +211,40 @@ export function buildAdditionalContext(prompt) {
     }
   }
 
-  const lines = ['[Foundry skill suggestions]'];
-  for (const m of matches) {
-    lines.push(`- ${m.slug} (score: ${m.score.toFixed(1)})`);
+  for (const k of memory.knowledge) {
+    incrementKnowledgeAccess(db, k.entry_id);
   }
-  lines.push('主 agent 自行決定是否採用上述 skills。');
+
+  const lines = [];
+
+  if (profile) {
+    lines.push(profile, '');
+  }
+
+  if (memory.knowledge.length > 0) {
+    lines.push('[Foundry knowledge]');
+    for (const k of memory.knowledge) {
+      lines.push(`- (${k.category}) ${k.abstract}`);
+    }
+    lines.push('');
+  }
+
+  if (memory.experiences.length > 0) {
+    lines.push('[Foundry experiences]');
+    for (const e of memory.experiences) {
+      const slugPart = e.skill_slug ? ` [${e.skill_slug}]` : '';
+      lines.push(`- (${e.lesson_type})${slugPart} ${e.abstract}`);
+    }
+    lines.push('');
+  }
+
+  if (skillMatches.length > 0) {
+    lines.push('[Foundry skill suggestions]');
+    for (const m of skillMatches) {
+      lines.push(`- ${m.slug} (score: ${m.score.toFixed(1)})`);
+    }
+    lines.push('主 agent 自行決定是否採用上述 skills。');
+  }
+
   return lines.join('\n');
 }

@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foundry Knowledge Entry",
+  "type": "object",
+  "required": ["entry_id", "category", "abstract", "created_at"],
+  "properties": {
+    "entry_id": { "type": "string" },
+    "category": {
+      "type": "string",
+      "enum": ["preference", "entity", "event", "pattern", "profile"]
+    },
+    "abstract": { "type": "string", "maxLength": 500 },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "body_path": { "type": "string" },
+    "state": {
+      "type": "string",
+      "enum": ["active", "stale", "archived", "pinned"],
+      "default": "active"
+    },
+    "rubric_score": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "source_session_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

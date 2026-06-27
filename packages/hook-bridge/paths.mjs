@@ -22,7 +22,7 @@ export function getSharedMemoryRoot() {
 /** 正式 skills 目的地 */
 export function getSkillsRoot() {
   return process.env.FOUNDRY_SKILLS_ROOT
-    || join(homedir(), 'Documents', 'code', 'ai_coding_labs', 'skills');
+    || join(homedir(), '.claude', 'skills');
 }
 
 /** 專案級 runs overlay */
@@ -36,6 +36,16 @@ export function getProjectRunsRoot(projectRoot) {
   return join(getSharedMemoryRoot(), 'runs');
 }
 
+/** 知識條目目錄 */
+export function knowledgeDir() {
+  return join(getMemoryRoot(), 'knowledge');
+}
+
+/** 經驗條目目錄 */
+export function experiencesDir() {
+  return join(getMemoryRoot(), 'experiences');
+}
+
 export const PATHS = {
   skills: () => join(getSharedMemoryRoot(), 'skills'),
   runs: () => join(getSharedMemoryRoot(), 'runs'),
@@ -44,8 +54,10 @@ export const PATHS = {
   agents: () => join(getSharedMemoryRoot(), 'agents'),
   sqlite: () => join(getSharedMemoryRoot(), 'skill_store.sqlite'),
   staging: () => join(getMemoryRoot(), 'skills-staging'),
+  knowledge: () => knowledgeDir(),
+  experiences: () => experiencesDir(),
 };
 
 export const EVOLUTION_TYPES = ['FIX', 'DERIVED', 'CAPTURED'];
-export const SESSION_STATUS = ['active', 'ended', 'archived'];
+export const SESSION_STATUS = ['active', 'ended', 'failed', 'archived'];
 export const QUEUE_STATUS = ['pending', 'processing', 'done', 'failed'];

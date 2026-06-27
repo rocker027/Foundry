@@ -1,10 +1,11 @@
 import { appendFileSync, mkdirSync, readFileSync, statSync, chmodSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { openDb, upsertSession, insertEventIndex, endSession } from './db.mjs';
+import { openDb, upsertSession, insertEventIndex, endSession, markSessionFailed } from './db.mjs';
 import { getGitContext } from './git.mjs';
 import { getProjectRunsRoot, PATHS } from './paths.mjs';
 import { sanitizePayload } from './redact.mjs';
 import { filterAllowedPaths } from './security.mjs';
+import { evaluateSessionSuccess } from './session-success.mjs';
 
 /** 將敏感檔案權限設為 600 */
 function chmod600(filePath) {
@@ -77,7 +78,13 @@ export function recordEvent(normalizedEvent) {
   });
 
   if (event.event === 'after_task') {
-    endSession(db, event.session_id);
+    const events = readSessionEvents(jsonlPath);
+    const evalResult = evaluateSessionSuccess(events);
+    if (evalResult.success) {
+      endSession(db, event.session_id, 'ended');
+    } else {
+      markSessionFailed(db, event.session_id);
+    }
   }
 
   return { event, jsonlPath, offset };

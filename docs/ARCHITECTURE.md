@@ -106,6 +106,19 @@ Drafts live in `evolved/{TYPE}/{slug}/` with:
 - `skills` — slug, state, reuse_count, success_rate
 - `lineage` — parent/child evolution DAG
 - `evolution_queue` — async analyze jobs
+- `knowledge_entries` — short memory / user profile index (v2)
+- `experiences` — extracted lessons from sessions (v2)
+- `skill_versions` — per-slug version chain linked to `.foundry/versions/` (v2)
+
+Skill directories under `FOUNDRY_SKILLS_ROOT` (default `~/.claude/skills`) may include:
+
+```
+{slug}/SKILL.md
+{slug}/.foundry/manifest.json
+{slug}/.foundry/versions/v{N}/SKILL.md
+```
+
+Body files for knowledge and experiences live under `~/.foundry/knowledge/` and `~/.foundry/experiences/`.
 
 ## Integration
 
@@ -128,31 +141,41 @@ foundry status
 foundry audit
 foundry install-hooks cursor|codex|claude [--target <path>]
 foundry analyze --session <id>
-foundry promote <slug> [--type CAPTURED|FIX|DERIVED] [--force]
+foundry apply <slug> [--type CAPTURED|FIX|DERIVED] [--draft <slug>] [--parent <slug>] [--force]
+foundry promote <slug>   (alias for apply)
+foundry adopt [--dry-run] [--slug <name>]
+foundry history <slug>
+foundry diff <slug> [--from vN] [--to current|vN]
+foundry rollback <slug> --to vN [--force]
+foundry review
+foundry migrate-mnemo [--dry-run] [--path <dir>]
+foundry migrate-auto-skill [--dry-run] [--path <dir>]
 foundry queue-worker [--once]
 foundry archive [--days 90] [--dry-run]
 foundry autopromote [--dry-run]
 foundry simulate-recorder
 ```
 
-### `promote` flags
+### `apply` / `promote` flags
 
 | Flag | Description |
 |------|-------------|
-| `--type CAPTURED\|FIX\|DERIVED` | Draft type under `evolved/{TYPE}/` (default: `CAPTURED`) |
-| `--force` | Allow promote to a custom `FOUNDRY_SKILLS_ROOT` outside the default path (emits warning) |
+| `--type CAPTURED\|FIX\|DERIVED` | Evolution type (default: `CAPTURED`) |
+| `--draft <slug>` | Draft slug under `evolved/{TYPE}/` when different from target |
+| `--parent <slug>` | Required for `DERIVED` — parent skill slug |
+| `--force` | Override locked skills or custom skills root guard |
 
 ### Environment (security-related)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FOUNDRY_SKILLS_ROOT` | `~/Documents/code/ai_coding_labs/skills` | Promote destination |
+| `FOUNDRY_SKILLS_ROOT` | `~/.claude/skills` | Canonical skills directory |
 | `FOUNDRY_ALLOW_CUSTOM_SKILLS_ROOT` | unset | Set to `1` to skip `assertSkillsRootAllowed()` checks |
 
 ### Tests
 
 ```bash
-npm test   # 16 unit tests in packages/hook-bridge/*.test.mjs
+npm test   # unit tests in packages/hook-bridge/*.test.mjs
 ```
 
 ## Phase Roadmap

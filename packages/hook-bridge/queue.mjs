@@ -2,13 +2,29 @@ import {
   writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, readdirSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { openDb, enqueueAnalyzeJob, updateQueueJob } from './db.mjs';
+import { openDb, enqueueAnalyzeJob, updateQueueJob, getSessionStatus } from './db.mjs';
 import { PATHS } from './paths.mjs';
+import { findSessionJsonl } from '../../agents/analyzer/analyze.mjs';
+import { readSessionEvents } from './recorder.mjs';
+import { shouldSkipExtractQueue } from './session-success.mjs';
 
-/** 在 after_task 時入隊分析任務 */
+/** 在 after_task 時入隊分析任務（失敗 session 跳過） */
 export function enqueueSessionAnalyze(sessionId) {
-  const jobId = crypto.randomUUID();
   const db = openDb();
+  const status = getSessionStatus(db, sessionId);
+  if (status === 'failed') {
+    return { skipped: true, reason: 'failed_session', sessionId };
+  }
+
+  const jsonlPath = findSessionJsonl(sessionId);
+  if (jsonlPath) {
+    const events = readSessionEvents(jsonlPath);
+    if (shouldSkipExtractQueue(events)) {
+      return { skipped: true, reason: 'session_not_successful', sessionId };
+    }
+  }
+
+  const jobId = crypto.randomUUID();
   enqueueAnalyzeJob(db, { jobId, sessionId });
 
   const queueDir = PATHS.queue();

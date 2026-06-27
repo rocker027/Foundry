@@ -65,26 +65,71 @@ export function buildProvenance(draft) {
   return {
     source: `foundry:session:${draft.session_id}`,
     created_at: draft.created_at,
-    confidence: 0.5,
-    author: 'foundry-analyzer',
+    confidence: draft.evolution_type === 'FIX' ? 0.7 : 0.5,
+    author: draft.evolution_type === 'FIX' ? 'foundry-extractor' : 'foundry-analyzer',
     session_id: draft.session_id,
-    evolution_type: 'CAPTURED',
+    experience_id: draft.experience_id ?? null,
+    evolution_type: draft.evolution_type || 'CAPTURED',
     foundry_version: '0.1.0',
   };
 }
 
-/** 寫入 evolved/CAPTURED/{slug}/ */
+/** 產生 FIX SKILL.md 補丁草稿 */
+export function buildFixSkillMarkdown(draft) {
+  const { slug, summary, session_id: sessionId } = draft;
+  const files = (summary.files || []).map((f) => `- \`${f}\``).join('\n') || '- （無檔案變更紀錄）';
+  const commands = (summary.commands || []).map((c) => `- \`${sanitizeCommand(c)}\``).join('\n') || '- （無命令紀錄）';
+
+  return `---
+name: ${slug}
+description: FIX 草稿 — 自 session ${sessionId.slice(0, 8)} 萃取的 skill 改進
+---
+
+# FIX: ${slug}
+
+> 自動產生的 FIX 草稿，需人工審核後 apply。
+
+## 改進摘要
+
+${summary.prompt || '（無明確 prompt）'}
+
+## 本次涉及檔案
+
+${files}
+
+## 執行的命令
+
+${commands}
+
+## 建議合併步驟
+
+1. 閱讀上述上下文與現有 SKILL.md
+2. 將可重用步驟補入對應章節
+3. 執行 \`foundry apply ${slug} --type FIX\` 並通過 Validator
+`;
+}
+
+/** 寫入 evolved/{type}/{slug}/ */
 export function writeEvolvedDraft(draft) {
-  const dir = join(PATHS.evolved(), 'CAPTURED', draft.slug);
+  const evolutionType = draft.evolution_type || 'CAPTURED';
+  const dir = join(PATHS.evolved(), evolutionType, draft.slug);
   mkdirSync(dir, { recursive: true });
 
   const skillPath = join(dir, 'SKILL.md');
   const provenancePath = join(dir, '.provenance.json');
   const diffPath = join(dir, 'PROMOTE.diff');
 
-  writeFileSync(skillPath, buildSkillMarkdown(draft), 'utf8');
+  const markdown = evolutionType === 'FIX'
+    ? buildFixSkillMarkdown(draft)
+    : buildSkillMarkdown(draft);
+
+  writeFileSync(skillPath, markdown, 'utf8');
   writeFileSync(provenancePath, `${JSON.stringify(buildProvenance(draft), null, 2)}\n`, 'utf8');
-  writeFileSync(diffPath, '# New skill — no parent diff\n', 'utf8');
+  writeFileSync(
+    diffPath,
+    evolutionType === 'FIX' ? '# FIX draft — merge into existing skill\n' : '# New skill — no parent diff\n',
+    'utf8',
+  );
 
   return { dir, skillPath, provenancePath };
 }

@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foundry Experience",
+  "type": "object",
+  "required": ["experience_id", "session_id", "abstract", "rubric_score", "created_at"],
+  "properties": {
+    "experience_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "skill_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "lesson_type": {
+      "type": "string",
+      "enum": ["bug-fix", "perf-trap", "new-solution", "pattern"]
+    },
+    "abstract": { "type": "string", "maxLength": 500 },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "body_path": { "type": "string" },
+    "rubric_score": { "type": "integer", "minimum": 2, "maximum": 3 },
+    "state": {
+      "type": "string",
+      "enum": ["pending", "promoted", "rejected", "archived"],
+      "default": "pending"
+    },
+    "promoted_version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
