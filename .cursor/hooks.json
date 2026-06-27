@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs before_task",
+        "timeout": 5
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs after_edit",
+        "timeout": 3
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs after_command",
+        "timeout": 3
+      }
+    ],
+    "stop": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs after_task",
+        "timeout": 5
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs postToolUseFailure",
+        "timeout": 3
+      }
+    ],
+    "preCompact": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs preCompact",
+        "timeout": 3
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "node packages/hook-bridge/adapters/cursor.mjs deny_read",
+        "timeout": 3,
+        "failClosed": true
+      }
+    ]
+  }
+}

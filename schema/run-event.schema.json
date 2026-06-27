@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foundry Run Event",
+  "type": "object",
+  "required": ["v", "ts", "event", "tool", "session_id", "project_root", "payload"],
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "ts": { "type": "string", "format": "date-time" },
+    "event": {
+      "type": "string",
+      "enum": ["before_task", "after_edit", "after_command", "after_task"]
+    },
+    "tool": { "type": "string", "enum": ["cursor", "codex", "claude"] },
+    "session_id": { "type": "string", "minLength": 1 },
+    "project_root": { "type": "string" },
+    "git": {
+      "type": "object",
+      "properties": {
+        "branch": { "type": ["string", "null"] },
+        "commit": { "type": ["string", "null"] }
+      }
+    },
+    "payload": { "type": "object" },
+    "redacted": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

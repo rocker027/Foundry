@@ -1,0 +1,20 @@
+{
+  "name": "foundry",
+  "version": "0.1.0",
+  "description": "Cross-tool hook-driven skill evolution layer for Cursor, Codex, and Claude Code",
+  "type": "module",
+  "bin": {
+    "foundry": "./cli/foundry.mjs"
+  },
+  "scripts": {
+    "foundry": "node cli/foundry.mjs",
+    "status": "node cli/foundry.mjs status",
+    "test": "node --test packages/hook-bridge/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.0"
+  }
+}

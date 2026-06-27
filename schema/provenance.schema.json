@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skill Provenance",
+  "description": "Provenance metadata aligned with ECC skill-evolution",
+  "type": "object",
+  "properties": {
+    "source": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "author": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string" },
+    "evolution_type": { "type": "string", "enum": ["FIX", "DERIVED", "CAPTURED"] },
+    "parent_slug": { "type": "string" },
+    "foundry_version": { "type": "string" }
+  },
+  "required": ["source", "created_at", "confidence", "author"],
+  "additionalProperties": true
+}

@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.foundry/
+.env
+.env.*
+# Added by code-review-graph
+.code-review-graph/
