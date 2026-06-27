@@ -28,6 +28,7 @@ import { migrateMnemo, migrateAutoSkill } from '../packages/hook-bridge/migrate.
 import { parseFixArgs, parseDeriveArgs, parseAuditArgs, parseDeprecateLegacyArgs } from '../packages/hook-bridge/cli-args.mjs';
 import { createFixDraftFromSession, createDerivedDraftFromSession } from '../packages/hook-bridge/session-draft.mjs';
 import { runKnowledgeAudit } from '../packages/hook-bridge/knowledge-audit.mjs';
+import { dedupeExperiences } from '../packages/hook-bridge/experience-dedup.mjs';
 import { planDeprecateLegacy, formatDeprecateReport } from '../packages/hook-bridge/deprecate-legacy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,7 @@ function usage() {
 Usage:
   foundry status
   foundry audit [knowledge]
+  foundry dedup experiences [--dry-run]
   foundry fix <slug> --from-session <id>
   foundry derive <parent-slug> --from-session <id> [--variant <name>]
   foundry install-hooks <cursor|codex|claude> [--target <path>]
@@ -161,6 +163,34 @@ function cmdAuditKnowledge() {
     `Full report written to ${result.reportPath}`,
     '',
   ];
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+function cmdDedupExperiences(args) {
+  const dryRun = args.includes('--dry-run');
+  const result = dedupeExperiences({ dryRun });
+  const lines = [
+    '# Foundry Experience Dedup',
+    '',
+    `- Groups scanned: ${result.groupsScanned}`,
+    `- Kept: ${result.kept}`,
+    `- Archived duplicates: ${result.archived}${dryRun ? ' (dry-run)' : ''}`,
+    '',
+  ];
+  if (result.archivedIds.length > 0) {
+    lines.push('## Archived', '');
+    for (const row of result.archivedIds.slice(0, 20)) {
+      lines.push(`- ${row.experience_id} → kept ${row.kept_id}`);
+      lines.push(`  session: ${row.session_id}`);
+      lines.push(`  abstract: ${row.abstract.slice(0, 80)}`);
+    }
+    if (result.archivedIds.length > 20) {
+      lines.push(`- ... and ${result.archivedIds.length - 20} more`);
+    }
+    lines.push('');
+  } else {
+    lines.push('No duplicate experiences found.', '');
+  }
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
@@ -1025,6 +1055,14 @@ async function main() {
       break;
     case 'audit':
       cmdAudit(args);
+      break;
+    case 'dedup':
+      if (args[0] === 'experiences') {
+        cmdDedupExperiences(args.slice(1));
+      } else {
+        process.stderr.write('Usage: foundry dedup experiences [--dry-run]\n');
+        process.exit(1);
+      }
       break;
     case 'fix':
       cmdFix(args);

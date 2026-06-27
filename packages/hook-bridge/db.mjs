@@ -365,6 +365,38 @@ export function getExperience(db, experienceId) {
   return row ? parseExperienceRow(row) : null;
 }
 
+/** 查詢 session 是否已有 experience（避免 queue 重複萃取） */
+export function findExperienceBySession(db, sessionId, {
+  abstract = null,
+  states = ['pending', 'promoted'],
+} = {}) {
+  let sql = `SELECT * FROM experiences WHERE session_id = ? AND state IN (${states.map(() => '?').join(',')})`;
+  const params = [sessionId, ...states];
+  if (abstract != null) {
+    sql += ' AND abstract = ?';
+    params.push(abstract);
+  }
+  sql += ' ORDER BY created_at ASC LIMIT 1';
+  const row = db.prepare(sql).get(...params);
+  return row ? parseExperienceRow(row) : null;
+}
+
+/** 查詢 session 是否已有 knowledge entry */
+export function findKnowledgeEntryBySession(db, sessionId, {
+  abstract = null,
+  states = ['active', 'pinned', 'stale'],
+} = {}) {
+  let sql = `SELECT * FROM knowledge_entries WHERE source_session_id = ? AND state IN (${states.map(() => '?').join(',')})`;
+  const params = [sessionId, ...states];
+  if (abstract != null) {
+    sql += ' AND abstract = ?';
+    params.push(abstract);
+  }
+  sql += ' ORDER BY created_at ASC LIMIT 1';
+  const row = db.prepare(sql).get(...params);
+  return row ? parseKnowledgeRow(row) : null;
+}
+
 /** 更新 experience 狀態 */
 export function updateExperienceState(db, experienceId, state, promotedVersion = null) {
   if (promotedVersion != null) {

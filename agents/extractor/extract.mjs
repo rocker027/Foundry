@@ -6,6 +6,7 @@ import {
 import { readSessionEvents } from '../../packages/hook-bridge/recorder.mjs';
 import {
   openDb, insertKnowledgeEntry, insertExperience, getSkillBySlug,
+  findExperienceBySession, findKnowledgeEntryBySession,
 } from '../../packages/hook-bridge/db.mjs';
 import { PATHS, getSkillsRoot } from '../../packages/hook-bridge/paths.mjs';
 import { evaluateSessionSuccess } from '../../packages/hook-bridge/session-success.mjs';
@@ -196,6 +197,16 @@ export function extractSession(sessionId) {
   };
 
   if (rubric.score === 2 && rubric.target === 'knowledge') {
+    const existingKnowledge = findKnowledgeEntryBySession(db, sessionId, { abstract });
+    if (existingKnowledge) {
+      return {
+        skipped: true,
+        reason: 'duplicate_knowledge',
+        existing_id: existingKnowledge.entry_id,
+        session_id: sessionId,
+        score: rubric.score,
+      };
+    }
     const entryId = crypto.randomUUID();
     const bodyPath = writeKnowledgeBody(entryId, summary, rubric);
     insertKnowledgeEntry(db, {
@@ -209,6 +220,16 @@ export function extractSession(sessionId) {
     });
     result.writes.push({ type: 'knowledge_entry', id: entryId, category: rubric.category });
   } else {
+    const existingExperience = findExperienceBySession(db, sessionId, { abstract });
+    if (existingExperience) {
+      return {
+        skipped: true,
+        reason: 'duplicate_experience',
+        existing_id: existingExperience.experience_id,
+        session_id: sessionId,
+        score: rubric.score,
+      };
+    }
     const experienceId = crypto.randomUUID();
     const bodyPath = writeExperienceBody(experienceId, summary, rubric);
     insertExperience(db, {
