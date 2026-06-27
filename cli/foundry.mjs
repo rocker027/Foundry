@@ -4,6 +4,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openDb, getStatusStats, closeDb, upsertSkill, insertLineage, querySkillVersions, updateExperienceState, insertSkillVersion } from '../packages/hook-bridge/db.mjs';
 import {
@@ -24,6 +25,10 @@ import {
   createInitialManifest, writeManifest, copySkillToVersionDir, versionDir,
 } from '../packages/hook-bridge/version.mjs';
 import { migrateMnemo, migrateAutoSkill } from '../packages/hook-bridge/migrate.mjs';
+import { parseFixArgs, parseDeriveArgs, parseAuditArgs, parseDeprecateLegacyArgs } from '../packages/hook-bridge/cli-args.mjs';
+import { createFixDraftFromSession, createDerivedDraftFromSession } from '../packages/hook-bridge/session-draft.mjs';
+import { runKnowledgeAudit } from '../packages/hook-bridge/knowledge-audit.mjs';
+import { planDeprecateLegacy, formatDeprecateReport } from '../packages/hook-bridge/deprecate-legacy.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = getFoundryRepoRoot();
@@ -36,7 +41,9 @@ function usage() {
 
 Usage:
   foundry status
-  foundry audit
+  foundry audit [knowledge]
+  foundry fix <slug> --from-session <id>
+  foundry derive <parent-slug> --from-session <id> [--variant <name>]
   foundry install-hooks <cursor|codex|claude> [--target <path>]
   foundry analyze --session <id>
   foundry apply <slug> [--type CAPTURED|FIX|DERIVED] [--draft <slug>] [--parent <slug>] [--force]
@@ -48,6 +55,8 @@ Usage:
   foundry review
   foundry migrate-mnemo [--dry-run] [--path <dir>]
   foundry migrate-auto-skill [--dry-run] [--path <dir>]
+  foundry deprecate-legacy [--dry-run] [--execute]
+  foundry setup [--target <path>] [--install-launchd]
   foundry queue-worker [--once]
   foundry autopromote [--dry-run]
   foundry archive [--days 90] [--dry-run]
@@ -104,7 +113,16 @@ function cmdStatus() {
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
-function cmdAudit() {
+function cmdAudit(args) {
+  const { subcommand } = parseAuditArgs(args);
+  if (subcommand === 'knowledge') {
+    cmdAuditKnowledge();
+    return;
+  }
+  cmdAuditSecurity();
+}
+
+function cmdAuditSecurity() {
   const result = auditMemoryStore();
   const lines = [
     '# Foundry Security Audit',
@@ -125,6 +143,99 @@ function cmdAudit() {
   lines.push('');
   process.stdout.write(`${lines.join('\n')}\n`);
   process.exit(result.ok ? 0 : 1);
+}
+
+function cmdAuditKnowledge() {
+  const result = runKnowledgeAudit();
+  const { summary } = result;
+  const lines = [
+    '# Foundry Knowledge Audit',
+    '',
+    `- Report: ${result.reportPath}`,
+    `- Knowledge active→stale: ${summary.knowledgeStale}`,
+    `- Knowledge stale→archived: ${summary.knowledgeArchived}`,
+    `- Experiences pending→archived: ${summary.experiencesArchived}`,
+    `- Refresh hints: ${summary.refreshHints}`,
+    `- Pinned skipped: ${summary.pinnedSkipped}`,
+    '',
+    `Full report written to ${result.reportPath}`,
+    '',
+  ];
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+function cmdFix(args) {
+  const { slug, sessionId } = parseFixArgs(args);
+  if (!slug || !sessionId) {
+    process.stderr.write('Usage: foundry fix <slug> --from-session <id>\n');
+    process.exit(1);
+  }
+  try {
+    validateSlug(slug);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  }
+
+  const result = createFixDraftFromSession(slug, sessionId);
+  const db = openDb();
+  upsertSkill(db, {
+    skillId: crypto.randomUUID(),
+    slug: result.slug,
+    origin: result.experienceId ? `experience:${result.experienceId}` : `session:${sessionId}:fix`,
+    path: result.dir,
+    state: 'draft',
+  });
+
+  process.stdout.write(`FIX draft created for ${result.slug}\n`);
+  process.stdout.write(`Draft: ${result.dir}\n`);
+  process.stdout.write(`Session: ${result.sessionId}\n`);
+  if (result.experienceId) process.stdout.write(`Experience: ${result.experienceId}\n`);
+  process.stdout.write(`Apply: foundry apply ${result.slug} --type FIX\n`);
+}
+
+function cmdDerive(args) {
+  const { parentSlug, sessionId, variant } = parseDeriveArgs(args);
+  if (!parentSlug || !sessionId) {
+    process.stderr.write('Usage: foundry derive <parent-slug> --from-session <id> [--variant <name>]\n');
+    process.exit(1);
+  }
+  try {
+    validateSlug(parentSlug);
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  }
+
+  const result = createDerivedDraftFromSession(parentSlug, sessionId, variant);
+  const db = openDb();
+  upsertSkill(db, {
+    skillId: crypto.randomUUID(),
+    slug: result.slug,
+    origin: result.experienceId ? `experience:${result.experienceId}` : `session:${sessionId}:derived`,
+    path: result.dir,
+    state: 'draft',
+  });
+
+  process.stdout.write(`DERIVED draft created: ${result.slug}\n`);
+  process.stdout.write(`Parent: ${result.parentSlug}\n`);
+  process.stdout.write(`Draft: ${result.dir}\n`);
+  process.stdout.write(`Session: ${result.sessionId}\n`);
+  if (result.experienceId) process.stdout.write(`Experience: ${result.experienceId}\n`);
+  process.stdout.write(`Apply: foundry apply ${result.slug} --type DERIVED --parent ${result.parentSlug}\n`);
+}
+
+function cmdDeprecateLegacy(args) {
+  const { dryRun, execute } = parseDeprecateLegacyArgs(args);
+  if (dryRun && execute) {
+    process.stderr.write('Use either --dry-run (default) or --execute, not both.\n');
+    process.exit(1);
+  }
+  const plan = planDeprecateLegacy({ execute });
+  process.stdout.write(`${formatDeprecateReport(plan)}\n`);
+  if (!execute) {
+    process.stdout.write('Dry-run only. Re-run with --execute to move directories.\n');
+  }
 }
 
 function installCursorHooks(targetDir) {
@@ -217,6 +328,42 @@ function installClaudeHooks() {
   addHook('Stop', 'Stop');
   writeFileSync(settingsPath, `${JSON.stringify({ ...existing, hooks }, null, 2)}\n`, 'utf8');
   return settingsPath;
+}
+
+function cmdSetup(args) {
+  const targetIdx = args.indexOf('--target');
+  const target = targetIdx >= 0 ? args[targetIdx + 1] : process.cwd();
+  const installLaunchd = args.includes('--install-launchd');
+
+  const lines = [
+    '# Foundry Setup',
+    '',
+    'Add to your shell profile:',
+    '',
+    `export FOUNDRY_REPO_ROOT="${REPO_ROOT}"`,
+    `export FOUNDRY_MEMORY_ROOT="${getMemoryRoot()}"`,
+    `export FOUNDRY_SKILLS_ROOT="${getSkillsRoot()}"`,
+    '',
+    'Installing hooks...',
+    '',
+  ];
+  process.stdout.write(`${lines.join('\n')}\n`);
+
+  cmdInstallHooks('codex');
+  cmdInstallHooks('claude');
+  cmdInstallHooks('cursor', target);
+
+  if (installLaunchd) {
+    const script = join(REPO_ROOT, 'scripts', 'install-launchd.sh');
+    const result = spawnSync('bash', [script], { stdio: 'inherit' });
+    if (result.status !== 0) {
+      process.exit(result.status ?? 1);
+    }
+  } else {
+    process.stdout.write('\nOptional: ./scripts/install-launchd.sh for background queue-worker\n');
+  }
+
+  process.stdout.write('\nSetup complete. See docs/SOP.md for weekly workflow.\n');
 }
 
 function cmdInstallHooks(tool, target) {
@@ -877,7 +1024,13 @@ async function main() {
       cmdStatus();
       break;
     case 'audit':
-      cmdAudit();
+      cmdAudit(args);
+      break;
+    case 'fix':
+      cmdFix(args);
+      break;
+    case 'derive':
+      cmdDerive(args);
       break;
     case 'install-hooks': {
       const targetIdx = args.indexOf('--target');
@@ -956,6 +1109,12 @@ async function main() {
       break;
     case 'migrate-auto-skill':
       cmdMigrateAutoSkill(args);
+      break;
+    case 'deprecate-legacy':
+      cmdDeprecateLegacy(args);
+      break;
+    case 'setup':
+      cmdSetup(args);
       break;
     case 'queue-worker':
       await cmdQueueWorker(args.includes('--once'));

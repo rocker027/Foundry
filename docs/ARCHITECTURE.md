@@ -11,6 +11,7 @@ ${FOUNDRY_MEMORY_ROOT}/          # default ~/.foundry/
     ├── evolved/                 # FIX|DERIVED|CAPTURED drafts
     ├── queue/                   # async analyze jobs
     ├── agents/                  # agent execution logs
+    ├── audit/                   # knowledge-REPORT.md from audit knowledge
     └── skill_store.sqlite
 
 <project>/.foundry/runs/         # project overlay (optional)
@@ -66,7 +67,8 @@ flowchart LR
 | **Recorder** | Sync JSONL + SQLite | Same |
 | **Retriever** | Keyword search skills + sqlite tags | Optional embeddings |
 | **Analyzer** | `foundry analyze --session` | Queue worker on `after_task` |
-| **Evolver** | Rule-based CAPTURED templates | LLM FIX/DERIVED |
+| **Extractor** | `extractSession` rubric → sqlite | `foundry fix/derive --from-session` |
+| **Evolver** | Rule-based CAPTURED/FIX/DERIVED templates | LLM-assisted merge |
 | **Validator** | Frontmatter + security + provenance | + LLM review |
 
 ## Skill Taxonomy
@@ -138,7 +140,9 @@ Foundry adapters call `~/.superset/hooks/cursor-hook.sh` and `notify.sh` after r
 
 ```
 foundry status
-foundry audit
+foundry audit [knowledge]
+foundry fix <slug> --from-session <id>
+foundry derive <parent-slug> --from-session <id> [--variant <name>]
 foundry install-hooks cursor|codex|claude [--target <path>]
 foundry analyze --session <id>
 foundry apply <slug> [--type CAPTURED|FIX|DERIVED] [--draft <slug>] [--parent <slug>] [--force]
@@ -150,11 +154,23 @@ foundry rollback <slug> --to vN [--force]
 foundry review
 foundry migrate-mnemo [--dry-run] [--path <dir>]
 foundry migrate-auto-skill [--dry-run] [--path <dir>]
+foundry deprecate-legacy [--dry-run] [--execute]
 foundry queue-worker [--once]
 foundry archive [--days 90] [--dry-run]
 foundry autopromote [--dry-run]
 foundry simulate-recorder
 ```
+
+### Knowledge lifecycle (`audit knowledge`)
+
+- `knowledge_entries`: `active` → `stale` (60d), `stale` → `archived` (90d); `pinned` entries skipped
+- `experiences`: `pending` → `archived` (90d)
+- Report: `~/.foundry/shared-agent-memory/audit/knowledge-REPORT.md`
+- Rule-based semantic refresh hints (never accessed, low rubric, stale events)
+
+### Background worker
+
+macOS launchd example: [docs/launchd/foundry-queue-worker.plist.example](launchd/foundry-queue-worker.plist.example) — runs `queue-worker --once` every 5 minutes.
 
 ### `apply` / `promote` flags
 
@@ -182,5 +198,5 @@ npm test   # unit tests in packages/hook-bridge/*.test.mjs
 
 - **Phase 0** — Recorder + Cursor + CLI status/audit
 - **Phase 1** — All adapters + analyze + promote
-- **Phase 2** — Retriever injection + queue worker
-- **Phase 3** — Low-risk autopromote to staging + quality metrics
+- **Phase 2** — Retriever injection + queue worker (analyze → extract → evolve)
+- **Phase 3** — fix/derive CLI, audit knowledge, deprecate-legacy, launchd template

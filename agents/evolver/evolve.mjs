@@ -62,16 +62,24 @@ ${commands}
 
 /** 產生 provenance.json */
 export function buildProvenance(draft) {
-  return {
+  const evolutionType = draft.evolution_type || 'CAPTURED';
+  const confidence = evolutionType === 'FIX' ? 0.7 : evolutionType === 'DERIVED' ? 0.6 : 0.5;
+  const author = evolutionType === 'FIX' || evolutionType === 'DERIVED'
+    ? 'foundry-extractor'
+    : 'foundry-analyzer';
+
+  const prov = {
     source: `foundry:session:${draft.session_id}`,
     created_at: draft.created_at,
-    confidence: draft.evolution_type === 'FIX' ? 0.7 : 0.5,
-    author: draft.evolution_type === 'FIX' ? 'foundry-extractor' : 'foundry-analyzer',
+    confidence,
+    author,
     session_id: draft.session_id,
     experience_id: draft.experience_id ?? null,
-    evolution_type: draft.evolution_type || 'CAPTURED',
+    evolution_type: evolutionType,
     foundry_version: '0.1.0',
   };
+  if (draft.parent_slug) prov.parent_slug = draft.parent_slug;
+  return prov;
 }
 
 /** 產生 FIX SKILL.md 補丁草稿 */
@@ -109,6 +117,47 @@ ${commands}
 `;
 }
 
+/** 產生 DERIVED SKILL.md 草稿 */
+export function buildDerivedSkillMarkdown(draft) {
+  const { slug, parent_slug: parentSlug, summary, session_id: sessionId } = draft;
+  const title = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const files = (summary.files || []).map((f) => `- \`${f}\``).join('\n') || '- （無檔案變更紀錄）';
+  const commands = (summary.commands || []).map((c) => `- \`${sanitizeCommand(c)}\``).join('\n') || '- （無命令紀錄）';
+
+  return `---
+name: ${slug}
+description: DERIVED 變體 — 自 ${parentSlug} 與 session ${sessionId.slice(0, 8)} 特化
+---
+
+# ${title}
+
+> 自 \`${parentSlug}\` 特化的 DERIVED 草稿，需人工審核後 apply。
+
+## 父 skill
+
+- **Parent**: \`${parentSlug}\`
+
+## 特化上下文
+
+- **工具**: ${summary.tool}
+- **專案**: ${summary.project_root || 'unknown'}
+
+## 涉及檔案
+
+${files}
+
+## 執行的命令
+
+${commands}
+
+## 步驟
+
+1. 閱讀 parent skill 與上述 session 上下文
+2. 調整特化步驟與觸發條件
+3. 執行 \`foundry apply ${slug} --type DERIVED --parent ${parentSlug}\`
+`;
+}
+
 /** 寫入 evolved/{type}/{slug}/ */
 export function writeEvolvedDraft(draft) {
   const evolutionType = draft.evolution_type || 'CAPTURED';
@@ -119,9 +168,14 @@ export function writeEvolvedDraft(draft) {
   const provenancePath = join(dir, '.provenance.json');
   const diffPath = join(dir, 'PROMOTE.diff');
 
-  const markdown = evolutionType === 'FIX'
-    ? buildFixSkillMarkdown(draft)
-    : buildSkillMarkdown(draft);
+  let markdown;
+  if (evolutionType === 'FIX') {
+    markdown = buildFixSkillMarkdown(draft);
+  } else if (evolutionType === 'DERIVED') {
+    markdown = buildDerivedSkillMarkdown(draft);
+  } else {
+    markdown = buildSkillMarkdown(draft);
+  }
 
   writeFileSync(skillPath, markdown, 'utf8');
   writeFileSync(provenancePath, `${JSON.stringify(buildProvenance(draft), null, 2)}\n`, 'utf8');

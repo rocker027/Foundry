@@ -4,7 +4,20 @@ import {
 import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PATHS, getSkillsRoot } from './paths.mjs';
-import { insertKnowledgeEntry, insertExperience, getKnowledgeEntry, getExperience } from './db.mjs';
+import {
+  insertKnowledgeEntry, insertExperience, getKnowledgeEntry, getExperience, upsertSession,
+} from './db.mjs';
+
+/** 確保 migrate 用的 placeholder session 存在，避免 experiences FK 失敗 */
+function ensureMigrateSession(db, sessionId, tool) {
+  upsertSession(db, {
+    sessionId,
+    tool,
+    projectRoot: null,
+    gitBranch: null,
+    status: 'ended',
+  });
+}
 
 function stableId(prefix, content) {
   const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
@@ -81,6 +94,10 @@ export function migrateMnemo(db, {
   if (!existsSync(root)) {
     stats.errors.push(`Mnemo dir not found: ${root}`);
     return stats;
+  }
+
+  if (!dryRun) {
+    ensureMigrateSession(db, sessionId, 'migrate-mnemo');
   }
 
   const memoryPath = join(root, 'MEMORY.md');
@@ -181,6 +198,10 @@ export function migrateAutoSkill(db, {
   if (!existsSync(root)) {
     stats.errors.push(`auto-skill dir not found: ${root}`);
     return stats;
+  }
+
+  if (!dryRun) {
+    ensureMigrateSession(db, sessionId, 'migrate-auto-skill');
   }
 
   const kbDir = join(root, 'knowledge-base');

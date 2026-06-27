@@ -12,6 +12,9 @@ Foundry records agent sessions via hooks, analyzes successful runs offline, prod
 cd /path/to/Foundry
 npm install
 
+# One-time setup: env hints + hooks for Cursor/Codex/Claude
+node cli/foundry.mjs setup --target /path/to/your/project
+
 # Check status (works with empty store)
 node cli/foundry.mjs status
 
@@ -28,19 +31,44 @@ node cli/foundry.mjs simulate-recorder
 # Analyze a session into evolved/CAPTURED/
 node cli/foundry.mjs analyze --session <session-id>
 
-# Promote a validated draft
-node cli/foundry.mjs promote <slug> [--type CAPTURED|FIX|DERIVED] [--force]
+# Create FIX draft from session (linked to experience)
+node cli/foundry.mjs fix <slug> --from-session <session-id>
 
-# Security audit
+# Create DERIVED variant draft from session
+node cli/foundry.mjs derive <parent-slug> --from-session <session-id> [--variant <name>]
+
+# Apply a validated draft (replaces promote)
+node cli/foundry.mjs apply <slug> [--type CAPTURED|FIX|DERIVED] [--draft <slug>] [--parent <slug>] [--force]
+node cli/foundry.mjs promote <slug>   # alias for apply
+
+# Adopt existing skills into version tracking
+node cli/foundry.mjs adopt [--dry-run] [--slug <name>]
+
+# Review evolved drafts, version history, diff, rollback
+node cli/foundry.mjs review
+node cli/foundry.mjs history <slug>
+node cli/foundry.mjs diff <slug> [--from vN] [--to current|vN]
+node cli/foundry.mjs rollback <slug> --to vN [--force]
+
+# Migrate legacy memory systems into SQLite
+node cli/foundry.mjs migrate-mnemo [--dry-run] [--path <dir>]
+node cli/foundry.mjs migrate-auto-skill [--dry-run] [--path <dir>]
+
+# Security audit + knowledge lifecycle audit
 node cli/foundry.mjs audit
+node cli/foundry.mjs audit knowledge
+
+# Deprecate legacy auto-skill / skill-mnemo directories (dry-run default)
+node cli/foundry.mjs deprecate-legacy [--dry-run]
+node cli/foundry.mjs deprecate-legacy --execute
 
 # Archive runs older than 90 days
 node cli/foundry.mjs archive --days 90 --dry-run
 
-# Process async analyze queue (after session ends)
+# Process async analyze queue (after session ends; cron every 5 min recommended)
 node cli/foundry.mjs queue-worker --once
 
-# Run security unit tests (16 tests)
+# Run unit tests
 npm test
 ```
 
@@ -49,7 +77,7 @@ npm test
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FOUNDRY_MEMORY_ROOT` | `~/.foundry` | Data root |
-| `FOUNDRY_SKILLS_ROOT` | `~/Documents/code/ai_coding_labs/skills` | Promote destination |
+| `FOUNDRY_SKILLS_ROOT` | `~/.claude/skills` | Promote destination |
 | `FOUNDRY_ALLOW_CUSTOM_SKILLS_ROOT` | unset | Set to `1` to allow promote to any `FOUNDRY_SKILLS_ROOT` without `--force` |
 | `FOUNDRY_REPO_ROOT` | Foundry repo path | Tooling root |
 | `FOUNDRY_PROJECT_RUNS` | `<project>/.foundry/runs` | Project overlay |
@@ -94,9 +122,15 @@ npm test   # 16 unit tests: validateSlug, path denylist, git slug safety, redact
 
 ## Relation to skill-mnemo
 
+Foundry now **replaces** skill-mnemo and auto-skill for memory indexing and skill evolution. Migrate with `migrate-mnemo` / `migrate-auto-skill`, then `deprecate-legacy`.
+
 | Tool | Responsibility |
 |------|----------------|
-| **skill-mnemo** | Session memory recall (USER/MEMORY) |
-| **Foundry** | Reusable SKILL evolution from runs |
+| **Foundry** | Session recording, experience extraction, skill evolution, unified SQLite recall |
+| **skill-mnemo** (deprecated) | Was round-level USER/MEMORY recall — use Foundry Retriever instead |
 
 Superset hooks are chained **after** Foundry adapters automatically.
+
+### Background worker (macOS launchd)
+
+See [docs/launchd/foundry-queue-worker.plist.example](docs/launchd/foundry-queue-worker.plist.example) to run `queue-worker --once` every 5 minutes.

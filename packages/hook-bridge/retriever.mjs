@@ -79,10 +79,20 @@ function scanSkillFiles(skillsRoot) {
   return results;
 }
 
-/** 從 sqlite 讀取 skill tags（slug + path） */
+/** 從 SKILL.md frontmatter 解析 description */
+export function parseSkillDescription(content) {
+  const match = String(content).match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return '';
+  const desc = match[1].match(/^description:\s*(.+)$/m)?.[1]?.trim();
+  return desc || '';
+}
+
+/** 從 sqlite 讀取 skill tags（slug + path + metrics） */
 function getSqliteSkills(db) {
   try {
-    return db.prepare('SELECT slug, path, reuse_count FROM skills WHERE state = ?').all('promoted');
+    return db.prepare(
+      'SELECT slug, path, reuse_count, success_rate FROM skills WHERE state = ?',
+    ).all('promoted');
   } catch {
     return [];
   }
@@ -111,7 +121,9 @@ export function retrieveSkills({ prompt, limit = 5 }) {
   const scored = new Map();
 
   for (const skill of fileSkills) {
-    const score = scoreText(skill.content, prompt, tokens);
+    const description = parseSkillDescription(skill.content);
+    const score = scoreText(skill.content, prompt, tokens)
+      + scoreText(description, prompt, tokens);
     if (score > 0) {
       scored.set(skill.slug, {
         slug: skill.slug,
@@ -119,14 +131,19 @@ export function retrieveSkills({ prompt, limit = 5 }) {
         score,
         source: 'filesystem',
         kind: 'skill',
+        description,
       });
     }
   }
 
   for (const row of dbSkills) {
-    const score = scoreText(row.slug, prompt, tokens) + (row.reuse_count || 0) * 0.1;
+    const score = scoreText(row.slug, prompt, tokens)
+      + (row.reuse_count || 0) * 0.1
+      + (row.success_rate || 0) * 5;
     if (score > 0) {
       const existing = scored.get(row.slug);
+      const fileMatch = fileSkills.find((s) => s.slug === row.slug);
+      const description = fileMatch ? parseSkillDescription(fileMatch.content) : '';
       if (!existing || score > existing.score) {
         scored.set(row.slug, {
           slug: row.slug,
@@ -134,6 +151,7 @@ export function retrieveSkills({ prompt, limit = 5 }) {
           score,
           source: 'sqlite',
           kind: 'skill',
+          description,
         });
       }
     }
@@ -241,7 +259,8 @@ export function buildAdditionalContext(prompt) {
   if (skillMatches.length > 0) {
     lines.push('[Foundry skill suggestions]');
     for (const m of skillMatches) {
-      lines.push(`- ${m.slug} (score: ${m.score.toFixed(1)})`);
+      const desc = m.description ? `: ${m.description.slice(0, 120)}` : '';
+      lines.push(`- ${m.slug}${desc} (score: ${m.score.toFixed(1)})`);
     }
     lines.push('主 agent 自行決定是否採用上述 skills。');
   }
