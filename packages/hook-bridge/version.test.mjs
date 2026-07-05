@@ -13,6 +13,7 @@ import {
   diffSkillContent,
   applyDraftToSkill,
   restoreVersionToCurrent,
+  copyAllowedDraftFiles,
 } from './version.mjs';
 import { validateSlug } from './security.mjs';
 import { openDb, closeDb, querySkillVersions } from './db.mjs';
@@ -132,6 +133,19 @@ describe('diffSkillContent', () => {
     const diff = diffSkillContent('line a\nline b\n', 'line a\nline c\n');
     assert.match(diff, /- line b/);
     assert.match(diff, /\+ line c/);
+  });
+});
+
+describe('copyAllowedDraftFiles', () => {
+  it('copies only whitelisted files for CAPTURED', () => {
+    writeSkill('whitelist-target', 'old\n');
+    const draftDir = writeDraft('CAPTURED', 'whitelist-draft', 'new content\n');
+    const secretPath = join(draftDir, 'secret.txt');
+    writeFileSync(secretPath, 'should-not-copy\n', 'utf8');
+
+    applyDraftToSkill('whitelist-target', skillsRoot, draftDir, 'CAPTURED');
+    assert.ok(existsSync(join(skillsRoot, 'whitelist-target', 'SKILL.md')));
+    assert.equal(existsSync(join(skillsRoot, 'whitelist-target', 'secret.txt')), false);
   });
 });
 

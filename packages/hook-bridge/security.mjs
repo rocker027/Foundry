@@ -4,9 +4,10 @@ const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const DENY_PATTERNS = [
   /^\.env(\.|$)/i,
-  /^\.env\./i,
+  /^\.envrc$/i,
   /credentials/i,
   /secrets?\//i,
+  /secrets\.json$/i,
   /\.pem$/i,
   /\.key$/i,
   /id_rsa/i,

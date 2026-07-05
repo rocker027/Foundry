@@ -102,22 +102,23 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ### Promote safeguards
 
 - **`foundry promote <slug> [--type CAPTURED|FIX|DERIVED] [--force]`** — `--type` selects the draft under `evolved/{TYPE}/`; defaults to `CAPTURED`
-- **`assertSkillsRootAllowed()`** — blocks promote when `FOUNDRY_SKILLS_ROOT` is outside the default `~/Documents/code/ai_coding_labs/skills` path unless:
+- **`assertSkillsRootAllowed()`** — blocks promote when `FOUNDRY_SKILLS_ROOT` is outside the default `~/.claude/skills` path (or legacy `~/Documents/code/ai_coding_labs/skills`) unless:
   - `FOUNDRY_ALLOW_CUSTOM_SKILLS_ROOT=1` is set, or
   - `--force` is passed (emits a warning and continues)
-- Allowed without override: the default skills root, or any path under `$HOME` that contains `ai_coding_labs/`
+- Allowed without override: the default skills root (`~/.claude/skills`), the legacy labs path, or any path under `$HOME` that contains `ai_coding_labs/` or `.claude/`
 
 ### Process and data hardening
 
 - **Git subprocesses** — `git.mjs` uses `spawnSync` with `shell: false`; slugs are validated before `git diff`
 - **File permissions** — `skill_store.sqlite` and run JSONL files are chmod `600` on write
 - **Hook adapters fail-open** — Cursor, Codex, and Claude adapters log invalid stdin JSON and exit `0` so a malformed hook payload does not block the host tool
+- **`deny-read` lightweight script** — the `beforeReadFile` hook runs `packages/hook-bridge/adapters/deny-read.mjs`, a standalone script with no native dependencies (only `security.mjs`). It checks the requested path against the denylist and returns allow/deny JSON; invalid input fails closed with exit `2`. Unlike the main Cursor adapter, it does not import `better-sqlite3`, so `npm install` is not required for read blocking to work.
 - **CAPTURED command re-redaction** — commands in evolved drafts pass through `redactString()` again; dangerous patterns become `[REDACTED COMMAND]`
 
 ### Tests
 
 ```bash
-npm test   # 16 unit tests: validateSlug, path denylist, git slug safety, redaction
+npm test   # 73+ unit tests: validateSlug, path denylist, git slug safety, redaction, deny-read, CLI integration
 ```
 
 ## Relation to skill-mnemo

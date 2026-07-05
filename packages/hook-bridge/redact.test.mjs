@@ -35,6 +35,24 @@ describe('redactString', () => {
     assert.ok(out.includes('api_key=[REDACTED]'));
   });
 
+  it('redacts Anthropic keys', () => {
+    const input = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890';
+    const out = redactString(input);
+    assert.ok(out.includes('sk-ant-[REDACTED]'));
+  });
+
+  it('redacts github_pat tokens', () => {
+    const input = 'github_pat_11ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const out = redactString(input);
+    assert.ok(out.includes('github_pat_[REDACTED]'));
+  });
+
+  it('redacts PEM private keys', () => {
+    const input = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----';
+    const out = redactString(input);
+    assert.ok(out.includes('[REDACTED PEM]'));
+  });
+
   it('passes through safe strings unchanged', () => {
     const input = 'npm test -- --coverage';
     assert.equal(redactString(input), input);

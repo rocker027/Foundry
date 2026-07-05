@@ -4,20 +4,14 @@ import {
 import { join, dirname } from 'node:path';
 import { PATHS } from './paths.mjs';
 import { openDb, closeDb } from './db.mjs';
+import { getRawSecretPatterns } from './redact.mjs';
 
 const DEFAULT_RETENTION_DAYS = 90;
 
 /** 偵測 JSONL 是否含未脫敏金鑰 */
-const RAW_SECRET_PATTERNS = [
-  /sk-[a-zA-Z0-9]{20,}/,
-  /ghp_[a-zA-Z0-9]{20,}/,
-  /gho_[a-zA-Z0-9]{20,}/,
-  /AKIA[0-9A-Z]{16}/,
-];
-
 export function containsRawSecrets(content) {
   if (typeof content !== 'string') return false;
-  return RAW_SECRET_PATTERNS.some((re) => re.test(content));
+  return getRawSecretPatterns().some((re) => re.test(content));
 }
 
 /** 從 runs/{tool}/{date}/{session}.jsonl 路徑解析 session id */
