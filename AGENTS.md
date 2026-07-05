@@ -36,3 +36,14 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## Cursor Cloud specific instructions
+
+Foundry is a pure Node.js ESM CLI (entry `cli/foundry.mjs`); there is no GUI, web server, or external service to run.
+
+- **Critical fail-closed hook:** `.cursor/hooks.json` registers a `beforeReadFile` hook (`deny_read`) with `failClosed: true`. It imports `better-sqlite3` (a native module). If dependencies are not installed, the hook crashes and **every file Read is blocked**. Always ensure `npm install` has run (the update script handles this) before reading files or the tools will fail.
+- **Lint:** there is no linter/lint script in this repo — only tests.
+- **Test:** `npm test` (Node's built-in test runner over `packages/hook-bridge/*.test.mjs`).
+- **Run the app:** `node cli/foundry.mjs <command>` (see `foundry help`). `foundry status` is a safe no-op sanity check that works with an empty store.
+- **Data location:** runtime state defaults to `~/.foundry` (SQLite at `~/.foundry/shared-agent-memory/skill_store.sqlite`); the repo is not modified by normal CLI use. `simulate-recorder` writes session JSONL under `<repo>/.foundry/runs/` (gitignored).
+- **Quick end-to-end check:** `foundry simulate-recorder` prints a session id; feed it to `foundry analyze --session <id>` to produce a CAPTURED skill draft under the memory root.
