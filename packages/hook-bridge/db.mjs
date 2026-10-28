@@ -112,6 +112,13 @@ CREATE INDEX IF NOT EXISTS idx_experiences_slug ON experiences(skill_slug);
 CREATE INDEX IF NOT EXISTS idx_experiences_state ON experiences(state);
 `;
 
+const MIGRATION_V3_SQL = `
+CREATE INDEX IF NOT EXISTS idx_experiences_session ON experiences(session_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_source_session ON knowledge_entries(source_session_id);
+`;
+
+const CURRENT_SCHEMA_VERSION = 3;
+
 let dbInstance = null;
 
 /** 將敏感檔案權限設為 600 */
@@ -125,6 +132,24 @@ function chmod600(filePath) {
   }
 }
 
+/** 依 user_version 執行增量遷移 */
+function runMigrations(db) {
+  let version = db.pragma('user_version', { simple: true });
+  if (version < 1) {
+    db.exec(MIGRATION_SQL);
+    version = 1;
+  }
+  if (version < 2) {
+    db.exec(MIGRATION_V2_SQL);
+    version = 2;
+  }
+  if (version < 3) {
+    db.exec(MIGRATION_V3_SQL);
+    version = 3;
+  }
+  db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+}
+
 /** 開啟並遷移 sqlite 資料庫 */
 export function openDb() {
   if (dbInstance) return dbInstance;
@@ -132,8 +157,9 @@ export function openDb() {
   mkdirSync(dirname(dbPath), { recursive: true });
   dbInstance = new Database(dbPath);
   dbInstance.pragma('journal_mode = WAL');
-  dbInstance.exec(MIGRATION_SQL);
-  dbInstance.exec(MIGRATION_V2_SQL);
+  dbInstance.pragma('busy_timeout = 5000');
+  dbInstance.pragma('foreign_keys = ON');
+  runMigrations(dbInstance);
   chmod600(dbPath);
   return dbInstance;
 }

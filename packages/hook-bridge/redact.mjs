@@ -1,14 +1,26 @@
 import { isDeniedPath } from './security.mjs';
 
-const SECRET_PATTERNS = [
+export const SECRET_PATTERNS = [
+  [/sk-ant-[a-zA-Z0-9_-]{20,}/g, 'sk-ant-[REDACTED]'],
   [/sk-[a-zA-Z0-9]{20,}/g, 'sk-[REDACTED]'],
   [/ghp_[a-zA-Z0-9]{20,}/g, 'ghp_[REDACTED]'],
   [/gho_[a-zA-Z0-9]{20,}/g, 'gho_[REDACTED]'],
+  [/github_pat_[a-zA-Z0-9_]{20,}/g, 'github_pat_[REDACTED]'],
+  [/ghs_[a-zA-Z0-9]{20,}/g, 'ghs_[REDACTED]'],
+  [/glpat-[a-zA-Z0-9_-]{20,}/g, 'glpat-[REDACTED]'],
+  [/AIza[0-9A-Za-z_-]{35}/g, 'AIza[REDACTED]'],
   [/xox[baprs]-[a-zA-Z0-9-]{10,}/g, 'xox[REDACTED]'],
   [/AKIA[0-9A-Z]{16}/g, 'AKIA[REDACTED]'],
   [/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]'],
   [/api[_-]?key\s*[:=]\s*['"]?[a-zA-Z0-9._-]{8,}/gi, 'api_key=[REDACTED]'],
+  [/(?:password|secret|token)\s*[:=]\s*['"]?[a-zA-Z0-9._-]{8,}/gi, '[REDACTED CREDENTIAL]'],
+  [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, '[REDACTED PEM]'],
 ];
+
+/** 供 archive 等模組使用的未脫敏偵測 pattern */
+export function getRawSecretPatterns() {
+  return SECRET_PATTERNS.map(([re]) => re);
+}
 
 export function redactString(value) {
   if (typeof value !== 'string') return value;

@@ -39,7 +39,7 @@
     ],
     "beforeReadFile": [
       {
-        "command": "node packages/hook-bridge/adapters/cursor.mjs deny_read",
+        "command": "node packages/hook-bridge/adapters/deny-read.mjs",
         "timeout": 3,
         "failClosed": true
       }

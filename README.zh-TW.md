@@ -112,12 +112,13 @@ npm test
 - **Git 子程序** — `git.mjs` 使用 `spawnSync` 且 `shell: false`；執行 `git diff` 前會先驗證 slug
 - **檔案權限** — 寫入 `skill_store.sqlite` 與 run JSONL 時會 chmod `600`
 - **Hook adapter 失敗放行** — Cursor、Codex、Claude adapter 在 stdin JSON 無效時記錄錯誤並以 exit `0` 結束，避免 malformed hook payload 阻擋主機工具
+- **`deny-read` 輕量腳本** — `beforeReadFile` 使用 `packages/hook-bridge/adapters/deny-read.mjs`（僅依賴 `security.mjs`，不載入 `better-sqlite3`）；無效輸入 fail-closed（exit `2`）
 - **CAPTURED 命令再脫敏** — evolved 草稿中的命令會再次經過 `redactString()`；危險模式會替換為 `[REDACTED COMMAND]`
 
 ### 測試
 
 ```bash
-npm test   # 16 項單元測試：validateSlug、路徑 denylist、git slug 安全、脫敏
+npm test   # 73+ 項單元測試：validateSlug、denylist、git slug 安全、脫敏、deny-read、CLI 整合
 ```
 
 ## 與 skill-mnemo 的關係

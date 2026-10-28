@@ -1,5 +1,5 @@
 import {
-  mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, readdirSync, copyFileSync,
+  mkdirSync, readFileSync, writeFileSync, existsSync, cpSync, readdirSync, copyFileSync, statSync,
 } from 'node:fs';
 import { join, basename } from 'node:path';
 import { validateSlug, assertPathWithinRoot } from './security.mjs';
@@ -306,6 +306,24 @@ export function diffSkillContent(fromText, toText) {
   return lines.join('\n');
 }
 
+const ALLOWED_DRAFT_FILES = ['SKILL.md', '.provenance.json', 'CHANGELOG.md'];
+
+/** 白名單複製草稿檔案，避免 symlink 帶入惡意路徑 */
+export function copyAllowedDraftFiles(draftDir, destDir) {
+  mkdirSync(destDir, { recursive: true });
+  for (const name of ALLOWED_DRAFT_FILES) {
+    const src = join(draftDir, name);
+    if (!existsSync(src)) continue;
+    const dest = join(destDir, name);
+    const stat = statSync(src);
+    if (stat.isDirectory()) {
+      cpSync(src, dest, { recursive: true, force: true, dereference: true });
+    } else if (stat.isFile()) {
+      copyFileSync(src, dest);
+    }
+  }
+}
+
 /** 將草稿目錄複製/合併到 skill 目錄 */
 export function applyDraftToSkill(slug, skillsRoot, draftDir, evolutionType) {
   validateSlug(slug);
@@ -313,8 +331,7 @@ export function applyDraftToSkill(slug, skillsRoot, draftDir, evolutionType) {
   assertPathWithinRoot(destDir, skillsRoot);
 
   if (evolutionType === 'CAPTURED' || evolutionType === 'DERIVED') {
-    mkdirSync(destDir, { recursive: true });
-    cpSync(draftDir, destDir, { recursive: true, force: true });
+    copyAllowedDraftFiles(draftDir, destDir);
     return destDir;
   }
 

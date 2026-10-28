@@ -29,6 +29,8 @@ describe('isDeniedPath', () => {
   it('flags sensitive file names', () => {
     assert.equal(isDeniedPath('.env'), true);
     assert.equal(isDeniedPath('/path/to/.env.local'), true);
+    assert.equal(isDeniedPath('.envrc'), true);
+    assert.equal(isDeniedPath('secrets.json'), true);
     assert.equal(isDeniedPath('credentials.json'), true);
     assert.equal(isDeniedPath('id_rsa'), true);
     assert.equal(isDeniedPath('server.pem'), true);

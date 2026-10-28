@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseFixArgs, parseDeriveArgs, parseAuditArgs, parseDeprecateLegacyArgs,
+  parseDiffArgs, parseRollbackArgs, parseApplyArgs,
 } from './cli-args.mjs';
 
 describe('CLI argument parsing', () => {
@@ -55,6 +56,47 @@ describe('CLI argument parsing', () => {
 
     it('sets execute when --execute passed', () => {
       assert.deepEqual(parseDeprecateLegacyArgs(['--execute']), { dryRun: false, execute: true });
+    });
+  });
+
+  describe('parseDiffArgs', () => {
+    it('parses slug without flags', () => {
+      assert.deepEqual(parseDiffArgs(['my-skill']), {
+        slug: 'my-skill',
+        fromVersion: null,
+        toVersion: null,
+      });
+    });
+
+    it('parses slug with --from and --to', () => {
+      assert.deepEqual(parseDiffArgs(['my-skill', '--from', 'v1', '--to', 'v2']), {
+        slug: 'my-skill',
+        fromVersion: 'v1',
+        toVersion: 'v2',
+      });
+    });
+  });
+
+  describe('parseRollbackArgs', () => {
+    it('parses slug and --to', () => {
+      assert.deepEqual(parseRollbackArgs(['my-skill', '--to', 'v2']), {
+        slug: 'my-skill',
+        toLabel: 'v2',
+        force: false,
+      });
+    });
+  });
+
+  describe('parseApplyArgs', () => {
+    it('parses promote-style flags', () => {
+      const result = parseApplyArgs([
+        'child-skill', '--type', 'DERIVED', '--draft', 'draft-slug', '--parent', 'parent-skill', '--force',
+      ]);
+      assert.equal(result.slug, 'child-skill');
+      assert.equal(result.type, 'DERIVED');
+      assert.equal(result.draftSlug, 'draft-slug');
+      assert.equal(result.parentSlug, 'parent-skill');
+      assert.equal(result.force, true);
     });
   });
 });

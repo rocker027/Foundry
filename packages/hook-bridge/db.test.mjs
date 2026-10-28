@@ -83,4 +83,10 @@ describe('db v2 migration', () => {
     assert.equal(stats.skillVersions, 1);
     assert.equal(stats.failed, 1);
   });
+
+  it('sets schema user_version to current', () => {
+    const db = openDb();
+    const version = db.pragma('user_version', { simple: true });
+    assert.equal(version, 3);
+  });
 });
